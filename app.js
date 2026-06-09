@@ -504,7 +504,7 @@ function renderTopbar() {
       </div>
       <div class="top-actions">
         <span class="teacher-pill">人机协同 · AI 拟初稿，教师终审定稿</span>
-        <span class="avatar">沈</span>
+        <span class="avatar">瑜</span>
       </div>
     </header>
   `;

@@ -309,11 +309,7 @@ button:disabled {
 }
 
 .two-module-grid.has-output {
-  grid-template-columns: minmax(0, 1.28fr) minmax(320px, 0.72fr);
-}
-
-.two-module-grid.has-output .output-module {
-  order: -1;
+  grid-template-columns: minmax(320px, 0.72fr) minmax(0, 1.28fr);
 }
 
 .module-card {
@@ -1306,10 +1302,6 @@ input::placeholder {
 
   .two-module-grid {
     gap: 16px;
-  }
-
-  .two-module-grid.has-output .output-module {
-    order: -1;
   }
 
   .screen-head {

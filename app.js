@@ -83,7 +83,6 @@ const STORAGE_KEY = "moheng_poem_assistant_state";
 const TEXT_KEY = "moheng_poem_assistant_text";
 
 const initialState = {
-  step: 1,
   text: localStorage.getItem(TEXT_KEY) || localStorage.getItem("moheng_text") || SAMPLE_TEXT,
   types: ["choice", "appreciation", "rubric"],
   difficulty: "高考模拟",
@@ -92,9 +91,6 @@ const initialState = {
   analysis: null,
   proposals: [],
   finalQuestions: [],
-  activeRail: "workspace",
-  showTweaks: false,
-  showBank: false,
   toast: "",
   tweak: {
     accent: ACCENTS[0],
@@ -110,7 +106,7 @@ function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return { ...initialState };
   try {
-    return { ...initialState, ...JSON.parse(saved), toast: "", showTweaks: false, showBank: false };
+    return { ...initialState, ...JSON.parse(saved), toast: "" };
   } catch {
     return { ...initialState };
   }
@@ -127,7 +123,6 @@ function persist() {
     proposals: state.proposals,
     finalQuestions: state.finalQuestions,
     tweak: state.tweak,
-    step: state.step,
   }));
   localStorage.setItem(TEXT_KEY, state.text);
 }
@@ -190,7 +185,7 @@ function inferTheme(text = state.text) {
   return hit ? hit[hit.length - 1] : "意象与情感变化";
 }
 
-function analyzeText() {
+function buildAnalysis() {
   const lines = getPoemLines();
   const text = state.text;
   const allText = text.replace(/\s/g, "");
@@ -211,7 +206,7 @@ function analyzeText() {
     images: imageWords.length || 4,
     difficulty: state.difficulty,
   };
-  const analysis = {
+  return {
     metrics,
     theme: inferTheme(text),
     imageWords: imageWords.length ? imageWords : ["景物", "时间", "声音", "人物"],
@@ -233,8 +228,6 @@ function analyzeText() {
       ], index),
     })),
   };
-  setState({ analysis, step: 2 });
-  toast("文本分析完成，已生成知识点和命题方向。");
 }
 
 function buildChoiceQuestion(analysis, seed) {
@@ -288,15 +281,15 @@ function buildExtensionQuestion(analysis, seed) {
   };
 }
 
-function generateProposals() {
-  const analysis = state.analysis || createInlineAnalysis();
-  const selected = state.types;
-  const proposals = state.models.map((modelId, modelIndex) => {
+function buildProposalGroups(analysis) {
+  const selected = state.types.length ? state.types : ["choice", "appreciation", "rubric"];
+  const modelIds = state.models.length ? state.models : MODELS.map((model) => model.id);
+  return modelIds.map((modelId, modelIndex) => {
     const model = MODELS.find((item) => item.id === modelId) || MODELS[0];
     const items = [];
     if (selected.includes("choice")) items.push(buildChoiceQuestion(analysis, modelIndex + 1));
     if (selected.includes("appreciation")) items.push(buildAppreciationQuestion(analysis, modelIndex + 2));
-    if (selected.includes("extension") || modelId === "exam") items.push(buildExtensionQuestion(analysis, modelIndex + 3));
+    if (selected.includes("extension")) items.push(buildExtensionQuestion(analysis, modelIndex + 3));
     return {
       model: model.name,
       desc: model.desc,
@@ -313,25 +306,11 @@ function generateProposals() {
       items,
     };
   });
-  setState({ proposals, step: 3 });
-  toast("已生成辅助出题内容。");
 }
 
-function createInlineAnalysis() {
-  const lines = getPoemLines();
-  return {
-    metrics: { chars: state.text.replace(/\s/g, "").length, poemLines: lines.length, images: 4, difficulty: state.difficulty },
-    theme: inferTheme(),
-    imageWords: ["落木", "澄江", "长笛", "白鸥"],
-    concepts: ["意象组合", "情景交融", "分点作答"],
-    scores: [["文本理解", 80], ["手法辨析", 78], ["区分度", 82], ["课堂讲评", 84]],
-    segments: lines.slice(0, 4).map((line, index) => ({ title: `片段 ${index + 1}`, line, note: "可作为命题依据。" })),
-  };
-}
-
-function finalizeQuestions() {
+function mergeFinalQuestions(proposals = state.proposals) {
   const merged = [];
-  state.proposals.forEach((proposal) => {
+  proposals.forEach((proposal) => {
     proposal.items.forEach((item) => {
       if (!merged.some((exists) => exists.type === item.type)) {
         merged.push({ ...item, id: `${item.id}-final` });
@@ -343,13 +322,19 @@ function finalizeQuestions() {
       item.rubric = item.rubric && item.rubric.length ? item.rubric : ["要点准确", "结合文本", "表达清楚"];
     });
   }
-  setState({ finalQuestions: merged, step: 4 });
-  toast("定稿已生成，可继续编辑、导出或入库。");
+  return merged;
 }
 
-function updateQuestion(id, field, value) {
-  const finalQuestions = state.finalQuestions.map((item) => (item.id === id ? { ...item, [field]: value } : item));
-  setState({ finalQuestions });
+function generateAuxiliaryContent() {
+  if (!state.text.trim()) {
+    toast("请先输入诗歌文本。");
+    return;
+  }
+  const analysis = buildAnalysis();
+  const proposals = buildProposalGroups(analysis);
+  const finalQuestions = mergeFinalQuestions(proposals);
+  setState({ analysis, proposals, finalQuestions });
+  toast("辅助出题内容已生成，可在右侧继续编辑。");
 }
 
 function saveQuestionDraft(id, field, value) {
@@ -365,29 +350,6 @@ function toast(message) {
     state.toast = "";
     render();
   }, 2600);
-}
-
-function saveToBank() {
-  const bank = getBank();
-  const entry = {
-    id: `bank-${Date.now()}`,
-    title: inferTheme(),
-    difficulty: state.difficulty,
-    createdAt: new Date().toLocaleString("zh-CN"),
-    questions: state.finalQuestions,
-    source: state.text.slice(0, 120),
-  };
-  localStorage.setItem("moheng_bank", JSON.stringify([entry, ...bank]));
-  setState({ showBank: true });
-  toast("已保存到本地题库。");
-}
-
-function getBank() {
-  try {
-    return JSON.parse(localStorage.getItem("moheng_bank") || "[]");
-  } catch {
-    return [];
-  }
 }
 
 function exportText() {
@@ -449,52 +411,26 @@ function toggleItem(list, id) {
 }
 
 function stepAction() {
-  if (state.step === 1) analyzeText();
-  else if (state.step === 2) generateProposals();
-  else if (state.step === 3) finalizeQuestions();
-  else exportText();
+  generateAuxiliaryContent();
 }
 
 function nextLabel() {
-  if (state.step === 1) return "开始篇目分析";
-  if (state.step === 2) return "生成辅助题组";
-  if (state.step === 3) return "整理为定稿";
-  return "导出试卷文本";
+  return "生成辅助出题内容";
 }
 
 function render() {
   app.innerHTML = `
-    <div class="app-shell">
-      ${renderRail()}
+    <div class="app-shell simple-shell">
       <main class="main">
         ${renderTopbar()}
-        ${renderSteps()}
-        <section class="workspace">
-          ${renderScreen()}
+        <section class="workspace two-module-workspace">
+          ${renderTwoModuleLayout()}
         </section>
       </main>
-      ${renderBottomBar()}
-      ${renderTweaks()}
-      ${renderDrawer()}
       ${state.toast ? `<div class="toast">${escapeHtml(state.toast)}</div>` : ""}
     </div>
   `;
   bindEvents();
-}
-
-function renderRail() {
-  return `
-    <aside class="rail">
-      <div class="seal" title="墨衡">命</div>
-      <button class="rail-button active" data-step="1" title="命题工作台">1</button>
-      <button class="rail-button" data-step="2" title="篇目分析">2</button>
-      <button class="rail-button" data-step="3" title="辅助出题">3</button>
-      <button class="rail-button" data-step="4" title="编辑定稿">4</button>
-      <div class="rail-spacer"></div>
-      <button class="rail-button" data-open-bank title="题库">库</button>
-      <button class="rail-button" data-open-tweaks title="样式微调">调</button>
-    </aside>
-  `;
 }
 
 function renderTopbar() {
@@ -502,238 +438,134 @@ function renderTopbar() {
     <header class="topbar">
       <div class="brand-title">
         <strong>墨衡 · 语文原创命题助手</strong>
-        <span>输入诗歌 · 输出辅助出题内容</span>
+        <span>输入诗歌，输出辅助出题内容</span>
       </div>
       <div class="top-actions">
-        <span class="teacher-pill">人机协同 · AI 拟初稿，教师终审定稿</span>
+        <span class="teacher-pill">辅助出题助手</span>
         <span class="avatar">瑜</span>
       </div>
     </header>
   `;
 }
 
-function renderSteps() {
-  const steps = [
-    ["输入诗歌", "文本与要求"],
-    ["辅助分析", "考点与方向"],
-    ["生成题组", "题目与解析"],
-    ["编辑定稿", "预览与导出"],
-  ];
+function renderTwoModuleLayout() {
   return `
-    <nav class="steps" aria-label="命题步骤">
-      ${steps.map(([title, desc], index) => {
-        const number = index + 1;
-        const cls = number === state.step ? "active" : number < state.step ? "done" : "";
-        return `
-          <button class="step ${cls}" data-step="${number}">
-            <span class="step-index">${number < state.step ? "✓" : number}</span>
-            <span class="step-copy"><strong>${title}</strong><span>${desc}</span></span>
-          </button>
-        `;
-      }).join("")}
-    </nav>
+    <div class="two-module-grid">
+      ${renderPoemInputModule()}
+      ${renderAuxiliaryOutputModule()}
+    </div>
   `;
 }
 
-function renderScreen() {
-  if (state.step === 1) return renderInputScreen();
-  if (state.step === 2) return renderAnalysisScreen();
-  if (state.step === 3) return renderCompareScreen();
-  return renderFinalizeScreen();
-}
-
-function screenHead(kicker, title, copy) {
+function renderPoemInputModule() {
   return `
-    <div class="screen-head">
-      <div>
-        <div class="screen-kicker">${kicker}</div>
-        <h1>${title}</h1>
-        <p>${copy}</p>
+    <section class="panel module-card input-module">
+      <div class="panel-header module-head">
+        <div class="panel-title">
+          <strong>输入诗歌</strong>
+          <span>粘贴原诗，设置题型、难度和需要输出的内容</span>
+        </div>
+        <div class="input-toolbar">
+          <button class="btn" data-load-sample>载入示例</button>
+          <label class="btn" for="fileInput">导入文本</label>
+          <input id="fileInput" class="hidden-file" type="file" accept=".txt,.md,.csv" />
+        </div>
       </div>
-      <div class="status-strip"><i class="dot"></i><span>本地演示系统 · 数据自动保存</span></div>
-    </div>
-  `;
-}
-
-function renderInputScreen() {
-  return `
-    ${screenHead("STEP 01 · 输入诗歌", "粘贴诗歌，设定出题要求", "核心流程很简单：输入诗歌，选择题型和难度，生成题目、答案、解析与评分标准。")}
-    <div class="grid-2">
-      <article class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><strong>诗歌文本</strong><span>支持粘贴、TXT 文件导入和示例载入</span></div>
-          <div class="input-toolbar">
-            <span class="tag red">古诗词</span>
-            <button class="btn" data-load-sample>载入示例</button>
-            <label class="btn" for="fileInput">导入文本</label>
-            <input id="fileInput" class="hidden-file" type="file" accept=".txt,.md,.csv" />
-          </div>
-        </div>
-        <textarea class="primary-input" data-text placeholder="粘贴一首诗歌，系统会辅助分析考点并生成题组">${escapeHtml(state.text)}</textarea>
-        <div class="input-foot">
-          <span>${state.text.replace(/\s/g, "").length} 字 · ${getPoemLines().length || getLines().length} 行</span>
-          <span>点击右侧配置后开始分析</span>
-        </div>
-      </article>
-
-      <aside class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><strong>命题要求</strong><span>组合题型、难度与交付内容</span></div>
-        </div>
-        <div class="panel-body">
-          <div class="section">
-            <h3>题型组合</h3>
-            <div class="check-list">
-              ${QUESTION_TYPES.map((item) => `
-                <label class="check-row">
-                  <input type="checkbox" data-type="${item.id}" ${state.types.includes(item.id) ? "checked" : ""} />
-                  <span class="check-main"><strong>${item.name}</strong><span>${item.desc}</span></span>
-                  <span class="tag">${item.level}</span>
-                </label>
-              `).join("")}
-            </div>
-          </div>
-          <div class="section">
-            <h3>难度定位</h3>
-            <div class="segmented">
-              ${["基础", "高考模拟", "拔高"].map((item) => `
-                <button data-difficulty="${item}" class="${state.difficulty === item ? "active" : ""}">${item}</button>
-              `).join("")}
-            </div>
-          </div>
-          <div class="section">
-            <h3>同时生成</h3>
-            <div class="chips">
-              ${["参考答案", "详细解析", "评分标准", "命题意图"].map((item) => `
-                <label class="chip"><input type="checkbox" data-output="${item}" ${state.outputs.includes(item) ? "checked" : ""} />${item}</label>
-              `).join("")}
-            </div>
-          </div>
-        </div>
-      </aside>
-    </div>
-  `;
-}
-
-function renderAnalysisScreen() {
-  const analysis = state.analysis || createInlineAnalysis();
-  return `
-    ${screenHead("STEP 02 · 辅助分析", "识别考点，生成命题方向", "先拆解意象、手法、情感和课堂讲评路径，再据此生成题目。")}
-    <div class="analysis-layout">
-      <aside class="panel plain">
-        <div class="panel-header">
-          <div class="panel-title"><strong>文本画像</strong><span>由当前篇目自动生成</span></div>
-        </div>
-        <div class="panel-body">
-          <div class="metric-grid">
-            <div class="metric"><span>文本字数</span><strong>${analysis.metrics.chars}</strong></div>
-            <div class="metric"><span>有效行数</span><strong>${analysis.metrics.poemLines}</strong></div>
-            <div class="metric"><span>核心意象</span><strong>${analysis.metrics.images}</strong></div>
-            <div class="metric"><span>难度</span><strong>${analysis.metrics.difficulty}</strong></div>
-          </div>
-          <div class="section" style="margin-top: 22px">
-            <h3>能力指标</h3>
-            <div class="bar-list">
-              ${analysis.scores.map(([label, value]) => `
-                <div class="bar-row"><span>${label}</span><div class="bar-track"><i class="bar-fill" style="width:${value}%"></i></div><span>${value}</span></div>
-              `).join("")}
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <section class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><strong>命题依据</strong><span>${analysis.theme}</span></div>
-          <span class="tag red">可生成题组</span>
-        </div>
-        <div class="panel-body">
-          <div class="section">
-            <h3>考点云图</h3>
-            <div class="concept-cloud">
-              ${analysis.concepts.map((item, index) => `<span class="concept ${index < 3 ? "major" : ""}">${item}</span>`).join("")}
-            </div>
-          </div>
-          <div class="section">
-            <h3>文本拆解</h3>
-            <div class="timeline">
-              ${analysis.segments.map((item) => `
-                <div class="quote-box">
-                  <strong>${item.title}</strong><br />
-                  ${escapeHtml(item.line)}<br />
-                  <span>${item.note}</span>
-                </div>
-              `).join("")}
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  `;
-}
-
-function renderCompareScreen() {
-  const proposals = state.proposals.length ? state.proposals : [];
-  return `
-    ${screenHead("STEP 03 · 生成题组", "输出可选题目，辅助教师定稿", "系统给出候选题、答案、解析和评分点，教师可以选择保留或继续修改。")}
-    ${proposals.length ? `
-      <div class="compare-grid">
-        ${proposals.map((proposal) => `
-          <article class="proposal-card">
-            <div class="proposal-head">
-              <div><h3>${proposal.model}</h3><p>${proposal.desc}</p></div>
-              <span class="tag blue">${proposal.items.length} 题</span>
-            </div>
-            <p>${proposal.stance}</p>
-            <div class="bar-list">
-              ${proposal.scores.map(([label, value]) => `
-                <div class="score-row"><span>${label}</span><span class="mini-track"><i style="width:${value}%"></i></span></div>
-              `).join("")}
-            </div>
-            ${proposal.items.map((item) => `
-              <div class="small-box">
-                <span>${item.type} · ${item.score}分</span>
-                <p>${escapeHtml(item.title)}</p>
-              </div>
+      <textarea class="primary-input poem-input" data-text placeholder="粘贴一首诗歌，系统会输出辅助出题内容">${escapeHtml(state.text)}</textarea>
+      <div class="input-foot">
+        <span>${state.text.replace(/\s/g, "").length} 字 · ${getPoemLines().length || getLines().length} 行</span>
+        <span>内容保存在当前浏览器本地</span>
+      </div>
+      <div class="module-config">
+        <div class="section">
+          <h3>题型</h3>
+          <div class="chips">
+            ${QUESTION_TYPES.map((item) => `
+              <label class="chip"><input type="checkbox" data-type="${item.id}" ${state.types.includes(item.id) ? "checked" : ""} />${item.name}</label>
             `).join("")}
-          </article>
-        `).join("")}
+          </div>
+        </div>
+        <div class="section compact-section">
+          <h3>难度</h3>
+          <div class="segmented">
+            ${["基础", "高考模拟", "拔高"].map((item) => `
+              <button data-difficulty="${item}" class="${state.difficulty === item ? "active" : ""}">${item}</button>
+            `).join("")}
+          </div>
+        </div>
+        <div class="section">
+          <h3>输出</h3>
+          <div class="chips">
+            ${["参考答案", "详细解析", "评分标准", "命题意图"].map((item) => `
+              <label class="chip"><input type="checkbox" data-output="${item}" ${state.outputs.includes(item) ? "checked" : ""} />${item}</label>
+            `).join("")}
+          </div>
+        </div>
+        <button class="btn primary generate-btn" data-main-action>${nextLabel()}</button>
       </div>
-    ` : `
-      <div class="empty">尚未生成候选题。请先完成篇目分析，或点击下方按钮生成题组。</div>
-    `}
+    </section>
   `;
 }
 
-function renderFinalizeScreen() {
+function renderAuxiliaryOutputModule() {
+  const analysis = state.analysis;
   return `
-    ${screenHead("STEP 04 · 编辑定稿", "教师终审，导出试卷", "题目、答案、解析、评分标准都可直接编辑。")}
-    <div class="final-layout">
-      <section class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><strong>命题定稿</strong><span>${state.finalQuestions.length} 道题 · ${state.finalQuestions.reduce((sum, item) => sum + Number(item.score || 0), 0)} 分</span></div>
-          <div class="inline-actions">
-            <button class="btn" data-save-bank>入库</button>
-            <button class="btn" data-export-json>JSON</button>
-            <button class="btn" data-print>打印</button>
-          </div>
+    <section class="panel module-card output-module">
+      <div class="panel-header module-head">
+        <div class="panel-title">
+          <strong>输出辅助出题内容</strong>
+          <span>${state.finalQuestions.length ? `${state.finalQuestions.length} 道题 · ${state.finalQuestions.reduce((sum, item) => sum + Number(item.score || 0), 0)} 分` : "等待生成"}</span>
         </div>
-        <div class="panel-body">
-          ${state.finalQuestions.length ? `
+        <div class="inline-actions">
+          <button class="btn" data-export-json ${state.finalQuestions.length ? "" : "disabled"}>JSON</button>
+          <button class="btn" data-print ${state.finalQuestions.length ? "" : "disabled"}>打印</button>
+          <button class="btn dark" data-export-text ${state.finalQuestions.length ? "" : "disabled"}>导出文本</button>
+        </div>
+      </div>
+      <div class="panel-body output-body">
+        ${analysis ? renderOutputAnalysis(analysis) : `<div class="empty">在左侧输入诗歌后，点击“生成辅助出题内容”。这里会输出考点分析、题目、参考答案、解析和评分标准。</div>`}
+        ${state.finalQuestions.length ? `
+          <div class="section output-section">
+            <h3>辅助题组</h3>
             <div class="question-list">
               ${state.finalQuestions.map((item, index) => renderQuestion(item, index)).join("")}
             </div>
-          ` : `<div class="empty">还没有定稿题目。请在上一步合并候选方案。</div>`}
-        </div>
-      </section>
-      <aside class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><strong>试卷预览</strong><span>按当前定稿实时生成</span></div>
-        </div>
-        <div class="panel-body">
-          ${renderPaperPreview()}
-        </div>
-      </aside>
+          </div>
+        ` : ""}
+      </div>
+    </section>
+  `;
+}
+
+function renderOutputAnalysis(analysis) {
+  return `
+    <div class="output-summary">
+      <div class="metric"><span>文本字数</span><strong>${analysis.metrics.chars}</strong></div>
+      <div class="metric"><span>有效行数</span><strong>${analysis.metrics.poemLines}</strong></div>
+      <div class="metric"><span>核心意象</span><strong>${analysis.metrics.images}</strong></div>
+      <div class="metric"><span>难度</span><strong>${analysis.metrics.difficulty}</strong></div>
+    </div>
+    <div class="section output-section">
+      <h3>命题依据</h3>
+      <div class="small-box">
+        <span>主题方向</span>
+        <p>${escapeHtml(analysis.theme)}</p>
+      </div>
+      <div class="concept-cloud compact-cloud">
+        ${analysis.concepts.map((item, index) => `<span class="concept ${index < 3 ? "major" : ""}">${item}</span>`).join("")}
+      </div>
+    </div>
+    <div class="section output-section">
+      <h3>文本拆解</h3>
+      <div class="timeline">
+        ${analysis.segments.map((item) => `
+          <div class="quote-box">
+            <strong>${item.title}</strong><br />
+            ${escapeHtml(item.line)}<br />
+            <span>${item.note}</span>
+          </div>
+        `).join("")}
+      </div>
     </div>
   `;
 }
@@ -769,98 +601,7 @@ function renderQuestion(item, index) {
   `;
 }
 
-function renderPaperPreview() {
-  if (!state.finalQuestions.length) return `<div class="empty">生成定稿后显示完整试卷。</div>`;
-  return `
-    <div class="paper-preview">
-      <h3>高中语文诗歌鉴赏原创试题</h3>
-      <div class="meta"><span>${state.difficulty}</span><span>${state.finalQuestions.length} 题</span><span>${state.outputs.join(" / ")}</span></div>
-      ${state.finalQuestions.map((item, index) => `
-        <p><strong>${index + 1}.（${item.score}分）</strong>${escapeHtml(item.title)}</p>
-        ${item.options ? `<p>${item.options.map(escapeHtml).join("<br />")}</p>` : ""}
-      `).join("")}
-    </div>
-  `;
-}
-
-function renderBottomBar() {
-  const canAct = state.step !== 4 || state.finalQuestions.length > 0;
-  return `
-    <footer class="bottom-bar">
-      <div class="progress-note">${bottomNote()}</div>
-      <div class="inline-actions">
-        <button class="btn ghost" data-prev ${state.step === 1 ? "disabled" : ""}>上一步</button>
-        <button class="btn primary" data-main-action ${canAct ? "" : "disabled"}>${nextLabel()}</button>
-      </div>
-    </footer>
-  `;
-}
-
-function bottomNote() {
-  if (state.step === 1) return "当前尚未进入分析。建议先确认题型、难度和输出内容。";
-  if (state.step === 2) return `已识别主题：${(state.analysis || createInlineAnalysis()).theme}`;
-  if (state.step === 3) return `候选方案：${state.proposals.reduce((sum, item) => sum + item.items.length, 0)} 道题`;
-  return "定稿可编辑，修改后会自动保存到浏览器本地。";
-}
-
-function renderTweaks() {
-  return `
-    <aside class="tweaks-pop ${state.showTweaks ? "open" : ""}">
-      <div class="panel-title"><strong>样式微调</strong><span>同步 Claude 原型里的可调设计语言</span></div>
-      <div class="section">
-        <h3>印章主色</h3>
-        <div class="swatches">
-          ${ACCENTS.map((colors, index) => `
-            <button class="swatch ${state.tweak.accent[0] === colors[0] ? "active" : ""}" data-accent="${index}" style="--swatch:${colors[0]}"></button>
-          `).join("")}
-        </div>
-      </div>
-      <div class="section">
-        <h3>纸面</h3>
-        <div class="segmented">
-          ${Object.keys(PAPER_TONES).map((paper) => `<button data-paper="${paper}" class="${state.tweak.paper === paper ? "active" : ""}">${paper}</button>`).join("")}
-        </div>
-      </div>
-      <div class="range-row">
-        <span>字号</span>
-        <input type="range" min="90" max="115" value="${state.tweak.fontScale}" data-font-scale />
-        <span>${state.tweak.fontScale}%</span>
-      </div>
-      <label class="chip"><input type="checkbox" data-texture ${state.tweak.texture ? "checked" : ""} />纸纹理</label>
-    </aside>
-  `;
-}
-
-function renderDrawer() {
-  const bank = getBank();
-  return `
-    <aside class="drawer ${state.showBank ? "open" : ""}">
-      <div class="drawer-head">
-        <div class="panel-title"><strong>本地题库</strong><span>${bank.length} 份命题记录</span></div>
-        <button class="btn icon" data-close-bank>×</button>
-      </div>
-      <div class="drawer-body">
-        ${bank.length ? bank.map((entry) => `
-          <article class="bank-item">
-            <div class="inline-actions">
-              <span class="tag red">${entry.difficulty}</span>
-              <span class="tag">${entry.createdAt}</span>
-            </div>
-            <strong>${escapeHtml(entry.title)}</strong>
-            <p>${escapeHtml(entry.source)}...</p>
-            <button class="btn" data-load-bank="${entry.id}">载入这份题组</button>
-          </article>
-        `).join("") : `<div class="empty">尚无题库记录。定稿后点击“入库”保存。</div>`}
-      </div>
-    </aside>
-  `;
-}
-
 function bindEvents() {
-  document.querySelectorAll("[data-step]").forEach((button) => {
-    button.addEventListener("click", () => setState({ step: Number(button.dataset.step) }));
-  });
-
   const text = document.querySelector("[data-text]");
   if (text) {
     text.addEventListener("input", (event) => {
@@ -878,31 +619,15 @@ function bindEvents() {
   document.querySelectorAll("[data-output]").forEach((input) => {
     input.addEventListener("change", () => setState({ outputs: toggleItem(state.outputs, input.dataset.output) }));
   });
-  document.querySelectorAll("[data-model]").forEach((input) => {
-    input.addEventListener("change", () => setState({ models: toggleItem(state.models, input.dataset.model) }));
-  });
   document.querySelectorAll("[data-difficulty]").forEach((button) => {
     button.addEventListener("click", () => setState({ difficulty: button.dataset.difficulty }));
   });
 
   document.querySelector("[data-main-action]")?.addEventListener("click", stepAction);
-  document.querySelector("[data-prev]")?.addEventListener("click", () => setState({ step: Math.max(1, state.step - 1) }));
 
-  document.querySelector("[data-save-bank]")?.addEventListener("click", saveToBank);
   document.querySelector("[data-export-json]")?.addEventListener("click", exportJson);
+  document.querySelector("[data-export-text]")?.addEventListener("click", exportText);
   document.querySelector("[data-print]")?.addEventListener("click", () => window.print());
-
-  document.querySelector("[data-open-bank]")?.addEventListener("click", () => setState({ showBank: true }));
-  document.querySelector("[data-close-bank]")?.addEventListener("click", () => setState({ showBank: false }));
-  document.querySelector("[data-open-tweaks]")?.addEventListener("click", () => setState({ showTweaks: !state.showTweaks }));
-
-  document.querySelectorAll("[data-load-bank]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const entry = getBank().find((item) => item.id === button.dataset.loadBank);
-      if (!entry) return;
-      setState({ finalQuestions: entry.questions, difficulty: entry.difficulty, step: 4, showBank: false });
-    });
-  });
 
   document.querySelectorAll("[data-question-field]").forEach((field) => {
     field.addEventListener("input", (event) => {
@@ -914,19 +639,6 @@ function bindEvents() {
       else saveQuestionDraft(question.id, field.dataset.questionField, value);
     });
     field.addEventListener("blur", render);
-  });
-
-  document.querySelectorAll("[data-accent]").forEach((button) => {
-    button.addEventListener("click", () => setState({ tweak: { ...state.tweak, accent: ACCENTS[Number(button.dataset.accent)] } }));
-  });
-  document.querySelectorAll("[data-paper]").forEach((button) => {
-    button.addEventListener("click", () => setState({ tweak: { ...state.tweak, paper: button.dataset.paper } }));
-  });
-  document.querySelector("[data-font-scale]")?.addEventListener("input", (event) => {
-    setState({ tweak: { ...state.tweak, fontScale: Number(event.target.value) } });
-  });
-  document.querySelector("[data-texture]")?.addEventListener("change", (event) => {
-    setState({ tweak: { ...state.tweak, texture: event.target.checked } });
   });
 }
 

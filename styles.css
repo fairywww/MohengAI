@@ -83,6 +83,10 @@ button:disabled {
   grid-template-columns: 76px minmax(0, 1fr);
 }
 
+.app-shell.simple-shell {
+  display: block;
+}
+
 .rail {
   border-right: 1px solid var(--line);
   background: rgba(251, 248, 241, 0.78);
@@ -291,6 +295,71 @@ button:disabled {
   max-width: 1560px;
   width: 100%;
   margin: 0 auto;
+}
+
+.two-module-workspace {
+  padding-bottom: 34px;
+}
+
+.two-module-grid {
+  display: grid;
+  grid-template-columns: minmax(360px, 0.86fr) minmax(0, 1.14fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.module-card {
+  min-height: calc(100vh - 132px);
+}
+
+.module-head {
+  align-items: flex-start;
+}
+
+.poem-input {
+  min-height: 420px;
+}
+
+.module-config {
+  border-top: 1px solid var(--line);
+  padding: 18px 20px 20px;
+  display: grid;
+  gap: 18px;
+  background: rgba(255, 253, 247, 0.32);
+}
+
+.module-config .section {
+  margin: 0;
+  gap: 10px;
+}
+
+.compact-section {
+  max-width: 460px;
+}
+
+.generate-btn {
+  width: 100%;
+  min-height: 46px;
+}
+
+.output-body {
+  display: grid;
+  gap: 22px;
+}
+
+.output-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.output-section {
+  margin: 0;
+}
+
+.compact-cloud {
+  min-height: 0;
+  margin-top: 12px;
 }
 
 .screen-kicker {
@@ -1081,12 +1150,17 @@ input::placeholder {
 @media (max-width: 1180px) {
   .grid-2,
   .analysis-layout,
-  .final-layout {
+  .final-layout,
+  .two-module-grid {
     grid-template-columns: 1fr;
   }
 
   .compare-grid {
     grid-template-columns: 1fr;
+  }
+
+  .module-card {
+    min-height: auto;
   }
 }
 
@@ -1137,9 +1211,25 @@ input::placeholder {
     padding: 22px 16px 120px;
   }
 
+  .two-module-workspace {
+    padding-bottom: 24px;
+  }
+
   .screen-head {
     display: grid;
     gap: 14px;
+  }
+
+  .module-head {
+    display: grid;
+  }
+
+  .output-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .poem-input {
+    min-height: 320px;
   }
 
   .bottom-bar {
@@ -1170,6 +1260,7 @@ input::placeholder {
   .steps,
   .bottom-bar,
   .screen-head,
+  .input-module,
   .final-layout > .panel:last-child,
   .question-top .inline-actions,
   .tweaks-pop,

@@ -462,12 +462,11 @@ function nextLabel() {
 
 function render() {
   app.innerHTML = `
-    <div class="app-shell">
-      ${renderRail()}
+    <div class="app-shell dialog-shell">
       <main class="main">
         ${renderTopbar()}
-        ${renderSteps()}
         <section class="workspace">
+          ${renderSteps()}
           ${renderScreen()}
         </section>
       </main>
@@ -498,12 +497,16 @@ function renderRail() {
 function renderTopbar() {
   return `
     <header class="topbar">
-      <div class="brand-title">
-        <strong>墨衡 · 语文原创命题助手</strong>
-        <span>诗歌鉴赏 · AI 多模型协同出题</span>
+      <div class="brand-lockup">
+        <div class="seal" title="墨衡">命</div>
+        <div class="brand-title">
+          <strong>墨衡 · 语文原创命题助手</strong>
+          <span>像聊天一样完成语文命题</span>
+        </div>
       </div>
       <div class="top-actions">
-        <span class="teacher-pill">人机协同 · AI 拟初稿，教师终审定稿</span>
+        <button class="btn ghost" data-open-bank>题库</button>
+        <button class="btn ghost" data-open-tweaks>样式</button>
         <span class="avatar">瑜</span>
       </div>
     </header>
@@ -542,7 +545,7 @@ function renderScreen() {
 
 function screenHead(kicker, title, copy) {
   return `
-    <div class="screen-head">
+    <div class="screen-head chat-head">
       <div>
         <div class="screen-kicker">${kicker}</div>
         <h1>${title}</h1>
@@ -553,74 +556,94 @@ function screenHead(kicker, title, copy) {
   `;
 }
 
-function renderInputScreen() {
+function renderQuickSettings() {
   return `
-    ${screenHead("STEP 01 · 命题工作台", "输入文本，设定命题要求", "三步即可成稿：输入文本、选择模型与要求、生成并修改。AI 负责拟出初稿，最终判断权在教师。")}
-    <div class="grid-2">
-      <article class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><strong>命题文本</strong><span>支持粘贴、TXT 文件导入和示例载入</span></div>
-          <div class="input-toolbar">
-            <span class="tag red">古诗词</span>
-            <button class="btn" data-load-sample>载入示例</button>
-            <label class="btn" for="fileInput">导入文本</label>
-            <input id="fileInput" class="hidden-file" type="file" accept=".txt,.md,.csv" />
+    <div class="settings-flow">
+      <div class="soft-section">
+        <div class="section-label">题型</div>
+        <div class="chips">
+          ${QUESTION_TYPES.map((item) => `
+            <label class="chip ${state.types.includes(item.id) ? "active" : ""}">
+              <input type="checkbox" data-type="${item.id}" ${state.types.includes(item.id) ? "checked" : ""} />
+              ${item.name}
+            </label>
+          `).join("")}
+        </div>
+      </div>
+      <div class="soft-section">
+        <div class="section-label">难度</div>
+        <div class="segmented compact">
+          ${["基础", "高考模拟", "拔高"].map((item) => `
+            <button data-difficulty="${item}" class="${state.difficulty === item ? "active" : ""}">${item}</button>
+          `).join("")}
+        </div>
+      </div>
+      <details class="advanced-settings">
+        <summary>更多生成偏好</summary>
+        <div class="soft-section">
+          <div class="section-label">同时生成</div>
+          <div class="chips">
+            ${["参考答案", "详细解析", "评分标准", "命题意图"].map((item) => `
+              <label class="chip ${state.outputs.includes(item) ? "active" : ""}">
+                <input type="checkbox" data-output="${item}" ${state.outputs.includes(item) ? "checked" : ""} />
+                ${item}
+              </label>
+            `).join("")}
           </div>
         </div>
-        <textarea class="primary-input" data-text placeholder="粘贴一首诗词、文言片段或现代文阅读材料">${escapeHtml(state.text)}</textarea>
-        <div class="input-foot">
-          <span>${state.text.replace(/\s/g, "").length} 字 · ${getPoemLines().length || getLines().length} 行</span>
-          <span>点击右侧配置后开始分析</span>
+        <div class="soft-section">
+          <div class="section-label">模型协同</div>
+          <div class="chips">
+            ${MODELS.map((model) => `
+              <label class="chip ${state.models.includes(model.id) ? "active" : ""}">
+                <input type="checkbox" data-model="${model.id}" ${state.models.includes(model.id) ? "checked" : ""} />
+                ${model.name}
+              </label>
+            `).join("")}
+          </div>
+        </div>
+      </details>
+    </div>
+  `;
+}
+
+function renderInputScreen() {
+  return `
+    ${screenHead("STEP 01", "直接告诉我你要怎么出题", "把诗文或阅读材料粘贴进来，也可以用一句话补充要求。设置项改成快捷选项，手机上可以横向滑动。")}
+    <div class="chat-thread">
+      <article class="msg assistant">
+        <div class="msg-meta">墨衡</div>
+        <div class="msg-body">
+          你可以像和 DeepSeek 对话一样使用：贴入文本，然后选择题型和难度。需要更自由时，直接在文本后面写“偏高考、要两道选择题、附评分标准”这类要求。
+        </div>
+        <div class="prompt-chips">
+          <button class="prompt-chip" data-preset="exam">高考模拟题</button>
+          <button class="prompt-chip" data-preset="choice">只做选择题</button>
+          <button class="prompt-chip" data-preset="full">完整答案解析</button>
         </div>
       </article>
 
-      <aside class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><strong>命题要求</strong><span>组合题型、难度与交付内容</span></div>
-        </div>
-        <div class="panel-body">
-          <div class="section">
-            <h3>题型组合</h3>
-            <div class="check-list">
-              ${QUESTION_TYPES.map((item) => `
-                <label class="check-row">
-                  <input type="checkbox" data-type="${item.id}" ${state.types.includes(item.id) ? "checked" : ""} />
-                  <span class="check-main"><strong>${item.name}</strong><span>${item.desc}</span></span>
-                  <span class="tag">${item.level}</span>
-                </label>
-              `).join("")}
-            </div>
-          </div>
-          <div class="section">
-            <h3>难度定位</h3>
-            <div class="segmented">
-              ${["基础", "高考模拟", "拔高"].map((item) => `
-                <button data-difficulty="${item}" class="${state.difficulty === item ? "active" : ""}">${item}</button>
-              `).join("")}
-            </div>
-          </div>
-          <div class="section">
-            <h3>同时生成</h3>
-            <div class="chips">
-              ${["参考答案", "详细解析", "评分标准", "命题意图"].map((item) => `
-                <label class="chip"><input type="checkbox" data-output="${item}" ${state.outputs.includes(item) ? "checked" : ""} />${item}</label>
-              `).join("")}
-            </div>
-          </div>
-          <div class="section">
-            <h3>参与生成的模型</h3>
-            <div class="model-list">
-              ${MODELS.map((model) => `
-                <label class="model-card">
-                  <strong>${model.name}</strong>
-                  <span class="switch"><input type="checkbox" data-model="${model.id}" ${state.models.includes(model.id) ? "checked" : ""} /><i></i></span>
-                  <span>${model.desc}</span>
-                </label>
-              `).join("")}
+      <article class="msg user wide">
+        <div class="msg-meta">你的材料</div>
+        <div class="source-composer">
+          <textarea class="primary-input chat-input" data-text placeholder="粘贴诗词、文言文、现代文材料，或直接写：帮我围绕《登快阁》出一套高考模拟题...">${escapeHtml(state.text)}</textarea>
+          <div class="source-actions">
+            <span>${state.text.replace(/\s/g, "").length} 字 · ${getPoemLines().length || getLines().length} 行</span>
+            <div class="inline-actions">
+              <button class="btn ghost" data-load-sample>示例</button>
+              <label class="btn ghost" for="fileInput">导入</label>
+              <input id="fileInput" class="hidden-file" type="file" accept=".txt,.md,.csv" />
             </div>
           </div>
         </div>
-      </aside>
+      </article>
+
+      <article class="msg assistant wide">
+        <div class="msg-meta">生成偏好</div>
+        <div class="msg-body">
+          ${renderQuickSettings()}
+        </div>
+      </article>
     </div>
   `;
 }
@@ -628,21 +651,23 @@ function renderInputScreen() {
 function renderAnalysisScreen() {
   const analysis = state.analysis || createInlineAnalysis();
   return `
-    ${screenHead("STEP 02 · 篇目分析", "识别考点，生成命题方向", "系统先把文本拆解为意象、手法、情感和课堂讲评路径，再给多模型命题提供约束。")}
-    <div class="analysis-layout">
-      <aside class="panel plain">
-        <div class="panel-header">
-          <div class="panel-title"><strong>文本画像</strong><span>由当前篇目自动生成</span></div>
-        </div>
-        <div class="panel-body">
+    ${screenHead("STEP 02", "我先把文本拆开看", "这里保留分析过程，但改成聊天摘要，重点信息更适合手机阅读。")}
+    <div class="chat-thread">
+      <article class="msg user">
+        <div class="msg-meta">你的材料摘要</div>
+        <div class="msg-body">${escapeHtml(getLines().slice(0, 3).join(" / "))}</div>
+      </article>
+      <article class="msg assistant wide">
+        <div class="msg-meta">文本画像</div>
+        <div class="msg-body">
           <div class="metric-grid">
             <div class="metric"><span>文本字数</span><strong>${analysis.metrics.chars}</strong></div>
             <div class="metric"><span>有效行数</span><strong>${analysis.metrics.poemLines}</strong></div>
             <div class="metric"><span>核心意象</span><strong>${analysis.metrics.images}</strong></div>
             <div class="metric"><span>难度</span><strong>${analysis.metrics.difficulty}</strong></div>
           </div>
-          <div class="section" style="margin-top: 22px">
-            <h3>能力指标</h3>
+          <div class="section">
+            <div class="section-label">能力指标</div>
             <div class="bar-list">
               ${analysis.scores.map(([label, value]) => `
                 <div class="bar-row"><span>${label}</span><div class="bar-track"><i class="bar-fill" style="width:${value}%"></i></div><span>${value}</span></div>
@@ -650,22 +675,19 @@ function renderAnalysisScreen() {
             </div>
           </div>
         </div>
-      </aside>
+      </article>
 
-      <section class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><strong>命题依据</strong><span>${analysis.theme}</span></div>
-          <span class="tag red">可进入协同出题</span>
-        </div>
-        <div class="panel-body">
+      <article class="msg assistant wide">
+        <div class="msg-meta">命题依据 · ${analysis.theme}</div>
+        <div class="msg-body">
           <div class="section">
-            <h3>考点云图</h3>
+            <div class="section-label">考点云图</div>
             <div class="concept-cloud">
               ${analysis.concepts.map((item, index) => `<span class="concept ${index < 3 ? "major" : ""}">${item}</span>`).join("")}
             </div>
           </div>
           <div class="section">
-            <h3>文本拆解</h3>
+            <div class="section-label">文本拆解</div>
             <div class="timeline">
               ${analysis.segments.map((item) => `
                 <div class="quote-box">
@@ -677,7 +699,7 @@ function renderAnalysisScreen() {
             </div>
           </div>
         </div>
-      </section>
+      </article>
     </div>
   `;
 }
@@ -685,11 +707,12 @@ function renderAnalysisScreen() {
 function renderCompareScreen() {
   const proposals = state.proposals.length ? state.proposals : [];
   return `
-    ${screenHead("STEP 03 · 多模型协同", "对比候选题，融合最佳方案", "不同模型从原创度、教学可讲评性和考试区分度三个角度生成候选题。")}
+    ${screenHead("STEP 03", "我给你几种出题方案", "候选题按对话消息呈现，手机上从上往下读即可。")}
     ${proposals.length ? `
-      <div class="compare-grid">
+      <div class="chat-thread proposal-thread">
         ${proposals.map((proposal) => `
-          <article class="proposal-card">
+          <article class="msg assistant wide proposal-card">
+            <div class="msg-meta">${proposal.model}</div>
             <div class="proposal-head">
               <div><h3>${proposal.model}</h3><p>${proposal.desc}</p></div>
               <span class="tag blue">${proposal.items.length} 题</span>
@@ -717,33 +740,29 @@ function renderCompareScreen() {
 
 function renderFinalizeScreen() {
   return `
-    ${screenHead("STEP 04 · 编辑定稿", "教师终审，导出试卷", "所有题目都可直接编辑。定稿可保存到本地题库，也可导出为文本、JSON 或打印为 PDF。")}
-    <div class="final-layout">
-      <section class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><strong>命题定稿</strong><span>${state.finalQuestions.length} 道题 · ${state.finalQuestions.reduce((sum, item) => sum + Number(item.score || 0), 0)} 分</span></div>
+    ${screenHead("STEP 04", "定稿可以直接改", "每道题都像一条可编辑消息。手机上先改题，再导出或保存到题库。")}
+    <div class="chat-thread final-thread">
+      <article class="msg assistant wide">
+        <div class="msg-meta">命题定稿 · ${state.finalQuestions.length} 道题 · ${state.finalQuestions.reduce((sum, item) => sum + Number(item.score || 0), 0)} 分</div>
+        <div class="msg-body">
           <div class="inline-actions">
             <button class="btn" data-save-bank>入库</button>
             <button class="btn" data-export-json>JSON</button>
             <button class="btn" data-print>打印</button>
           </div>
-        </div>
-        <div class="panel-body">
           ${state.finalQuestions.length ? `
             <div class="question-list">
               ${state.finalQuestions.map((item, index) => renderQuestion(item, index)).join("")}
             </div>
           ` : `<div class="empty">还没有定稿题目。请在上一步合并候选方案。</div>`}
         </div>
-      </section>
-      <aside class="panel">
-        <div class="panel-header">
-          <div class="panel-title"><strong>试卷预览</strong><span>按当前定稿实时生成</span></div>
-        </div>
-        <div class="panel-body">
+      </article>
+      <article class="msg assistant wide">
+        <div class="msg-meta">试卷预览</div>
+        <div class="msg-body">
           ${renderPaperPreview()}
         </div>
-      </aside>
+      </article>
     </div>
   `;
 }
@@ -796,7 +815,7 @@ function renderPaperPreview() {
 function renderBottomBar() {
   const canAct = state.step !== 4 || state.finalQuestions.length > 0;
   return `
-    <footer class="bottom-bar">
+    <footer class="bottom-bar chat-actionbar">
       <div class="progress-note">${bottomNote()}</div>
       <div class="inline-actions">
         <button class="btn ghost" data-prev ${state.step === 1 ? "disabled" : ""}>上一步</button>
@@ -893,6 +912,22 @@ function bindEvents() {
   });
   document.querySelectorAll("[data-difficulty]").forEach((button) => {
     button.addEventListener("click", () => setState({ difficulty: button.dataset.difficulty }));
+  });
+  document.querySelectorAll("[data-preset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.preset === "exam") {
+        setState({ difficulty: "高考模拟", types: ["choice", "appreciation", "rubric"], outputs: ["参考答案", "详细解析", "评分标准", "命题意图"] });
+        toast("已切换为高考模拟题配置。");
+      }
+      if (button.dataset.preset === "choice") {
+        setState({ types: ["choice", "rubric"], outputs: ["参考答案", "详细解析", "评分标准"] });
+        toast("已切换为选择题优先。");
+      }
+      if (button.dataset.preset === "full") {
+        setState({ outputs: ["参考答案", "详细解析", "评分标准", "命题意图"], models: ["moheng", "teaching", "exam"] });
+        toast("已开启完整答案、解析和评分标准。");
+      }
+    });
   });
 
   document.querySelector("[data-main-action]")?.addEventListener("click", stepAction);

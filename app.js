@@ -334,6 +334,9 @@ function generateAuxiliaryContent() {
   const proposals = buildProposalGroups(analysis);
   const finalQuestions = mergeFinalQuestions(proposals);
   setState({ analysis, proposals, finalQuestions });
+  window.requestAnimationFrame(() => {
+    document.querySelector(".output-module")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   toast("辅助出题内容已生成，可在右侧继续编辑。");
 }
 
@@ -354,17 +357,25 @@ function toast(message) {
 
 function exportText() {
   const content = renderPaperText();
-  download("墨衡命题定稿.txt", content, "text/plain;charset=utf-8");
+  download("墨衡题目内容.txt", content, "text/plain;charset=utf-8");
 }
 
-function exportJson() {
-  download("墨衡命题定稿.json", JSON.stringify({
-    source: state.text,
-    difficulty: state.difficulty,
-    outputs: state.outputs,
-    analysis: state.analysis,
-    questions: state.finalQuestions,
-  }, null, 2), "application/json;charset=utf-8");
+async function copyText() {
+  const content = renderPaperText();
+  try {
+    await navigator.clipboard.writeText(content);
+  } catch {
+    const field = document.createElement("textarea");
+    field.value = content;
+    field.setAttribute("readonly", "");
+    field.style.position = "fixed";
+    field.style.opacity = "0";
+    document.body.appendChild(field);
+    field.select();
+    document.execCommand("copy");
+    field.remove();
+  }
+  toast("题目内容已复制。");
 }
 
 function download(filename, content, type) {
@@ -450,7 +461,7 @@ function renderTopbar() {
 
 function renderTwoModuleLayout() {
   return `
-    <div class="two-module-grid">
+    <div class="two-module-grid ${state.finalQuestions.length ? "has-output" : ""}">
       ${renderPoemInputModule()}
       ${renderAuxiliaryOutputModule()}
     </div>
@@ -477,31 +488,36 @@ function renderPoemInputModule() {
         <span>内容保存在当前浏览器本地</span>
       </div>
       <div class="module-config">
-        <div class="section">
-          <h3>题型</h3>
-          <div class="chips">
-            ${QUESTION_TYPES.map((item) => `
-              <label class="chip"><input type="checkbox" data-type="${item.id}" ${state.types.includes(item.id) ? "checked" : ""} />${item.name}</label>
-            `).join("")}
-          </div>
-        </div>
-        <div class="section compact-section">
-          <h3>难度</h3>
-          <div class="segmented">
-            ${["基础", "高考模拟", "拔高"].map((item) => `
-              <button data-difficulty="${item}" class="${state.difficulty === item ? "active" : ""}">${item}</button>
-            `).join("")}
-          </div>
-        </div>
-        <div class="section">
-          <h3>输出</h3>
-          <div class="chips">
-            ${["参考答案", "详细解析", "评分标准", "命题意图"].map((item) => `
-              <label class="chip"><input type="checkbox" data-output="${item}" ${state.outputs.includes(item) ? "checked" : ""} />${item}</label>
-            `).join("")}
-          </div>
-        </div>
         <button class="btn primary generate-btn" data-main-action>${nextLabel()}</button>
+        <details class="assist-details">
+          <summary>题型和难度设置</summary>
+          <div class="details-body">
+            <div class="section">
+              <h3>题型</h3>
+              <div class="chips">
+                ${QUESTION_TYPES.map((item) => `
+                  <label class="chip"><input type="checkbox" data-type="${item.id}" ${state.types.includes(item.id) ? "checked" : ""} />${item.name}</label>
+                `).join("")}
+              </div>
+            </div>
+            <div class="section compact-section">
+              <h3>难度</h3>
+              <div class="segmented">
+                ${["基础", "高考模拟", "拔高"].map((item) => `
+                  <button data-difficulty="${item}" class="${state.difficulty === item ? "active" : ""}">${item}</button>
+                `).join("")}
+              </div>
+            </div>
+            <div class="section">
+              <h3>输出</h3>
+              <div class="chips">
+                ${["参考答案", "详细解析", "评分标准", "命题意图"].map((item) => `
+                  <label class="chip"><input type="checkbox" data-output="${item}" ${state.outputs.includes(item) ? "checked" : ""} />${item}</label>
+                `).join("")}
+              </div>
+            </div>
+          </div>
+        </details>
       </div>
     </section>
   `;
@@ -517,20 +533,24 @@ function renderAuxiliaryOutputModule() {
           <span>${state.finalQuestions.length ? `${state.finalQuestions.length} 道题 · ${state.finalQuestions.reduce((sum, item) => sum + Number(item.score || 0), 0)} 分` : "等待生成"}</span>
         </div>
         <div class="inline-actions">
-          <button class="btn" data-export-json ${state.finalQuestions.length ? "" : "disabled"}>JSON</button>
-          <button class="btn" data-print ${state.finalQuestions.length ? "" : "disabled"}>打印</button>
-          <button class="btn dark" data-export-text ${state.finalQuestions.length ? "" : "disabled"}>导出文本</button>
+          <button class="btn" data-copy-text ${state.finalQuestions.length ? "" : "disabled"}>复制题目</button>
+          <button class="btn dark" data-export-text ${state.finalQuestions.length ? "" : "disabled"}>下载题目</button>
         </div>
       </div>
       <div class="panel-body output-body">
-        ${analysis ? renderOutputAnalysis(analysis) : `<div class="empty">在左侧输入诗歌后，点击“生成辅助出题内容”。这里会输出考点分析、题目、参考答案、解析和评分标准。</div>`}
         ${state.finalQuestions.length ? `
-          <div class="section output-section">
-            <h3>辅助题组</h3>
+          <div class="section output-section main-output">
+            <h3>题目内容</h3>
             <div class="question-list">
               ${state.finalQuestions.map((item, index) => renderQuestion(item, index)).join("")}
             </div>
           </div>
+        ` : `<div class="empty">先输入诗歌，点击“生成辅助出题内容”。生成后，题目会出现在这里。</div>`}
+        ${analysis ? `
+          <details class="assist-details output-assist">
+            <summary>查看命题依据和文本拆解</summary>
+            <div class="details-body">${renderOutputAnalysis(analysis)}</div>
+          </details>
         ` : ""}
       </div>
     </section>
@@ -580,22 +600,27 @@ function renderQuestion(item, index) {
         </div>
       </div>
       <div class="question-content">
-        <textarea class="editable" data-question-field="title" data-question-id="${item.id}">${escapeHtml(item.title)}</textarea>
-        ${item.options ? `<textarea class="editable" data-question-field="options" data-question-id="${item.id}">${escapeHtml(item.options.join("\n"))}</textarea>` : ""}
-        <div class="answer-grid">
-          <div class="small-box">
-            <span>参考答案</span>
-            <textarea class="editable" data-question-field="answer" data-question-id="${item.id}">${escapeHtml(item.answer)}</textarea>
+        <textarea class="editable question-title" data-question-field="title" data-question-id="${item.id}">${escapeHtml(item.title)}</textarea>
+        ${item.options ? `<textarea class="editable question-options" data-question-field="options" data-question-id="${item.id}">${escapeHtml(item.options.join("\n"))}</textarea>` : ""}
+        <details class="assist-details answer-details">
+          <summary>展开答案、解析与评分标准</summary>
+          <div class="details-body">
+            <div class="answer-grid">
+              <div class="small-box">
+                <span>参考答案</span>
+                <textarea class="editable" data-question-field="answer" data-question-id="${item.id}">${escapeHtml(item.answer)}</textarea>
+              </div>
+              <div class="small-box">
+                <span>解析</span>
+                <textarea class="editable" data-question-field="analysis" data-question-id="${item.id}">${escapeHtml(item.analysis)}</textarea>
+              </div>
+            </div>
+            <div class="small-box">
+              <span>评分标准</span>
+              <textarea class="editable" data-question-field="rubric" data-question-id="${item.id}">${escapeHtml((item.rubric || []).join("\n"))}</textarea>
+            </div>
           </div>
-          <div class="small-box">
-            <span>解析</span>
-            <textarea class="editable" data-question-field="analysis" data-question-id="${item.id}">${escapeHtml(item.analysis)}</textarea>
-          </div>
-        </div>
-        <div class="small-box">
-          <span>评分标准</span>
-          <textarea class="editable" data-question-field="rubric" data-question-id="${item.id}">${escapeHtml((item.rubric || []).join("\n"))}</textarea>
-        </div>
+        </details>
       </div>
     </article>
   `;
@@ -625,9 +650,8 @@ function bindEvents() {
 
   document.querySelector("[data-main-action]")?.addEventListener("click", stepAction);
 
-  document.querySelector("[data-export-json]")?.addEventListener("click", exportJson);
+  document.querySelector("[data-copy-text]")?.addEventListener("click", copyText);
   document.querySelector("[data-export-text]")?.addEventListener("click", exportText);
-  document.querySelector("[data-print]")?.addEventListener("click", () => window.print());
 
   document.querySelectorAll("[data-question-field]").forEach((field) => {
     field.addEventListener("input", (event) => {

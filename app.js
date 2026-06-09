@@ -91,6 +91,8 @@ const initialState = {
   analysis: null,
   proposals: [],
   finalQuestions: [],
+  mobileView: "input",
+  activeQuestion: 0,
   toast: "",
   tweak: {
     accent: ACCENTS[0],
@@ -122,6 +124,8 @@ function persist() {
     analysis: state.analysis,
     proposals: state.proposals,
     finalQuestions: state.finalQuestions,
+    mobileView: state.mobileView,
+    activeQuestion: state.activeQuestion,
     tweak: state.tweak,
   }));
   localStorage.setItem(TEXT_KEY, state.text);
@@ -333,7 +337,7 @@ function generateAuxiliaryContent() {
   const analysis = buildAnalysis();
   const proposals = buildProposalGroups(analysis);
   const finalQuestions = mergeFinalQuestions(proposals);
-  setState({ analysis, proposals, finalQuestions });
+  setState({ analysis, proposals, finalQuestions, mobileView: "questions", activeQuestion: 0 });
   window.requestAnimationFrame(() => {
     document.querySelector(".output-module")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
@@ -429,9 +433,14 @@ function nextLabel() {
   return "生成辅助出题内容";
 }
 
+function activeQuestionIndex() {
+  if (!state.finalQuestions.length) return 0;
+  return Math.min(Math.max(Number(state.activeQuestion) || 0, 0), state.finalQuestions.length - 1);
+}
+
 function render() {
   app.innerHTML = `
-    <div class="app-shell simple-shell">
+    <div class="app-shell simple-shell mobile-view-${state.mobileView}">
       <main class="main">
         ${renderTopbar()}
         <section class="workspace two-module-workspace">
@@ -489,7 +498,7 @@ function renderPoemInputModule() {
       </div>
       <div class="module-config">
         <button class="btn primary generate-btn" data-main-action>${nextLabel()}</button>
-        <details class="assist-details">
+        <details class="assist-details settings-details" open>
           <summary>题型和难度设置</summary>
           <div class="details-body">
             <div class="section">
@@ -525,6 +534,7 @@ function renderPoemInputModule() {
 
 function renderAuxiliaryOutputModule() {
   const analysis = state.analysis;
+  const activeIndex = activeQuestionIndex();
   return `
     <section class="panel module-card output-module">
       <div class="panel-header module-head">
@@ -539,11 +549,16 @@ function renderAuxiliaryOutputModule() {
       </div>
       <div class="panel-body output-body">
         ${state.finalQuestions.length ? `
+          <div class="mobile-question-bar">
+            <button class="btn ghost" data-mobile-view="input">修改诗歌</button>
+            <span>第 ${activeIndex + 1} / ${state.finalQuestions.length} 题</span>
+          </div>
           <div class="section output-section main-output">
             <h3>题目内容</h3>
             <div class="question-list">
-              ${state.finalQuestions.map((item, index) => renderQuestion(item, index)).join("")}
+              ${state.finalQuestions.map((item, index) => renderQuestion(item, index, activeIndex)).join("")}
             </div>
+            ${renderQuestionPager(activeIndex)}
           </div>
         ` : `<div class="empty">先输入诗歌，点击“生成辅助出题内容”。生成后，题目会出现在这里。</div>`}
         ${analysis ? `
@@ -554,6 +569,17 @@ function renderAuxiliaryOutputModule() {
         ` : ""}
       </div>
     </section>
+  `;
+}
+
+function renderQuestionPager(activeIndex) {
+  if (state.finalQuestions.length <= 1) return "";
+  return `
+    <div class="question-pager">
+      <button class="btn" data-question-prev ${activeIndex === 0 ? "disabled" : ""}>上一题</button>
+      <span>${activeIndex + 1} / ${state.finalQuestions.length}</span>
+      <button class="btn dark" data-question-next ${activeIndex >= state.finalQuestions.length - 1 ? "disabled" : ""}>下一题</button>
+    </div>
   `;
 }
 
@@ -590,9 +616,9 @@ function renderOutputAnalysis(analysis) {
   `;
 }
 
-function renderQuestion(item, index) {
+function renderQuestion(item, index, activeIndex = 0) {
   return `
-    <article class="question-card">
+    <article class="question-card ${index === activeIndex ? "active-question" : ""}">
       <div class="question-top">
         <strong><span class="tag red">${index + 1}</span>${item.type} · ${item.score}分</strong>
         <div class="inline-actions">
@@ -649,6 +675,15 @@ function bindEvents() {
   });
 
   document.querySelector("[data-main-action]")?.addEventListener("click", stepAction);
+  document.querySelectorAll("[data-mobile-view]").forEach((button) => {
+    button.addEventListener("click", () => setState({ mobileView: button.dataset.mobileView }));
+  });
+  document.querySelector("[data-question-prev]")?.addEventListener("click", () => {
+    setState({ activeQuestion: Math.max(activeQuestionIndex() - 1, 0), mobileView: "questions" });
+  });
+  document.querySelector("[data-question-next]")?.addEventListener("click", () => {
+    setState({ activeQuestion: Math.min(activeQuestionIndex() + 1, state.finalQuestions.length - 1), mobileView: "questions" });
+  });
 
   document.querySelector("[data-copy-text]")?.addEventListener("click", copyText);
   document.querySelector("[data-export-text]")?.addEventListener("click", exportText);

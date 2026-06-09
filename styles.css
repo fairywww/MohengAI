@@ -415,6 +415,11 @@ button:disabled {
   margin: 0;
 }
 
+.mobile-question-bar,
+.question-pager {
+  display: none;
+}
+
 .main-output h3 {
   margin: 0;
   color: var(--cinnabar-ink);
@@ -1304,6 +1309,16 @@ input::placeholder {
     gap: 16px;
   }
 
+  .mobile-view-input .output-module,
+  .mobile-view-questions .input-module {
+    display: none;
+  }
+
+  .mobile-view-input .two-module-grid,
+  .mobile-view-questions .two-module-grid {
+    display: block;
+  }
+
   .screen-head {
     display: grid;
     gap: 14px;
@@ -1328,15 +1343,62 @@ input::placeholder {
   }
 
   .poem-input {
-    min-height: 260px;
+    min-height: 46vh;
   }
 
   .two-module-grid.has-output .poem-input {
-    min-height: 180px;
+    min-height: 46vh;
   }
 
   .module-config {
     padding: 14px;
+  }
+
+  .settings-details .details-body {
+    gap: 18px;
+  }
+
+  .mobile-question-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+  }
+
+  .mobile-question-bar span {
+    white-space: nowrap;
+  }
+
+  .mobile-view-questions .output-module {
+    min-height: calc(100vh - 104px);
+  }
+
+  .mobile-view-questions .question-list {
+    display: block;
+  }
+
+  .mobile-view-questions .question-card {
+    display: none;
+  }
+
+  .mobile-view-questions .question-card.active-question {
+    display: block;
+  }
+
+  .question-pager {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 10px;
+    align-items: center;
+    margin-top: 14px;
+  }
+
+  .question-pager span {
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    white-space: nowrap;
   }
 
   .question-top {
